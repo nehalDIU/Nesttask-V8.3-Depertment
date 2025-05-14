@@ -34,6 +34,65 @@ interface SupabaseUser {
   student_id?: string;
 }
 
+// Initialize IndexedDB
+const DB_NAME = 'nesttask-auth-storage';
+const DB_VERSION = 1;
+const STORE_NAME = 'auth';
+
+async function initializeIndexedDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = () => {
+      console.error('Error opening IndexedDB:', request.error);
+      reject(request.error);
+    };
+
+    request.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result;
+      
+      // Check if the store already exists
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+        console.log('Created auth store in IndexedDB');
+      }
+    };
+
+    request.onsuccess = () => {
+      const db = request.result;
+      resolve(db);
+    };
+  });
+}
+
+// Helper function to store data in IndexedDB
+async function storeInIndexedDB(key: string, value: any): Promise<void> {
+  try {
+    const db = await initializeIndexedDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      
+      const request = store.put(value, key);
+      
+      request.onerror = () => {
+        console.error('Error storing in IndexedDB:', request.error);
+        reject(request.error);
+      };
+      
+      request.onsuccess = () => {
+        resolve();
+      };
+      
+      transaction.oncomplete = () => {
+        db.close();
+      };
+    });
+  } catch (error) {
+    console.warn('Failed to store in IndexedDB:', error);
+  }
+}
+
 export async function loginUser({ email, password }: LoginCredentials): Promise<User> {
   try {
     if (!email || !password) {
@@ -170,33 +229,11 @@ export async function loginUser({ email, password }: LoginCredentials): Promise<
       // Store session data for persistence across browser restarts
       localStorage.setItem('supabase.auth.token', JSON.stringify(authData.session));
       
-      // Also store in persistent storage for redundancy
+      // Store in IndexedDB for redundancy
       try {
-        if ('indexedDB' in window) {
-          const request = indexedDB.open('nesttask-auth-storage', 1);
-          
-          request.onupgradeneeded = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains('auth')) {
-              db.createObjectStore('auth');
-            }
-          };
-          
-          request.onsuccess = () => {
-            const db = request.result;
-            const tx = db.transaction('auth', 'readwrite');
-            const store = tx.objectStore('auth');
-            
-            // Store session data
-            store.put(JSON.stringify(authData.session), 'session');
-            store.put(email, 'email');
-            store.put(true, 'remember_me');
-            
-            tx.oncomplete = () => {
-              db.close();
-            };
-          };
-        }
+        await storeInIndexedDB('session', JSON.stringify(authData.session));
+        await storeInIndexedDB('email', email);
+        await storeInIndexedDB('remember_me', true);
       } catch (e) {
         console.warn('IndexedDB storage failed, falling back to localStorage only', e);
       }
@@ -456,19 +493,11 @@ export async function logoutUser(): Promise<void> {
     
     // Clear IndexedDB storage
     try {
-      if ('indexedDB' in window) {
-        console.log('Clearing IndexedDB storage...');
-        const request = indexedDB.open('nesttask-auth-storage', 1);
-        request.onsuccess = () => {
-          const db = request.result;
-          const tx = db.transaction('auth', 'readwrite');
-          const store = tx.objectStore('auth');
-          store.clear();
-          tx.oncomplete = () => {
-            db.close();
-          };
-        };
-      }
+      const db = await initializeIndexedDB();
+      const transaction = db.transaction(STORE_NAME, 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      await store.clear();
+      db.close();
     } catch (e) {
       console.warn('Failed to clear IndexedDB storage:', e);
     }
@@ -519,6 +548,8 @@ function setupTokenRefresh(refreshToken: string) {
         // Successfully refreshed - update stored session
         if (refreshData?.session) {
           localStorage.setItem('supabase.auth.token', JSON.stringify(refreshData.session));
+          // Also update IndexedDB
+          await storeInIndexedDB('session', JSON.stringify(refreshData.session));
         }
       }
     } catch (err) {
