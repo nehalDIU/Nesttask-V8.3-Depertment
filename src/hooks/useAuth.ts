@@ -217,14 +217,10 @@ export function useAuth() {
             
             // Handle superadmin redirect for demo users too
             if (demoUser.role === 'super-admin' || demoUser.email === 'superadmin@nesttask.com') {
-              console.log('Demo super admin detected, redirecting...');
+              console.log('Demo super admin detected');
               localStorage.setItem('is_super_admin', 'true');
               sessionStorage.setItem('is_super_admin', 'true');
               localStorage.setItem('auth_completed', 'true');
-              
-              setTimeout(() => {
-                window.location.href = '/super-admin';
-              }, 500);
             }
             
             return demoUser;
@@ -271,11 +267,6 @@ export function useAuth() {
         localStorage.setItem('auth_completed', 'true');
         
         setUser(user);
-        
-        // Use setTimeout to ensure the user state is updated before redirect
-        setTimeout(() => {
-          window.location.href = '/super-admin';
-        }, 500);
         
         return user;
       }
