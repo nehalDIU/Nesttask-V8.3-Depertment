@@ -14,21 +14,17 @@ interface LoginFormProps {
 }
 
 export function LoginForm({ onSubmit, onSwitchToSignup, onForgotPassword, error }: LoginFormProps) {
-  // In dev mode, prefill with a test email to make testing easier
-  const defaultEmail = import.meta.env.DEV ? 'test@example.com' : '';
-  const defaultPassword = import.meta.env.DEV ? 'password123' : '';
-  
   const [credentials, setCredentials] = useState<LoginCredentials>({
-    email: defaultEmail,
-    password: defaultPassword,
+    email: '',
+    password: '',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [touched, setTouched] = useState({ 
-    email: Boolean(defaultEmail), 
-    password: Boolean(defaultPassword)
+    email: false, 
+    password: false
   });
-  const [showPassword, setShowPassword] = useState(import.meta.env.DEV);
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
 
   const validateForm = () => {
